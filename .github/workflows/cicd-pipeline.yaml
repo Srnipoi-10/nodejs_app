@@ -1,0 +1,45 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - feature/**
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      # 1. Клонирование репозитория
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Установка Docker CLI (если нужно)
+      - name: Set up Docker CLI
+        run: sudo apt-get update && sudo apt-get install -y docker.io
+
+      # 3. Сборка нового Docker-образа с уникальным тегом
+      - name: Build Docker image
+        run: |
+          IMAGE_TAG=nodejs-app:${{ github.sha }}
+          echo "Building Docker image with tag: $IMAGE_TAG"
+          docker build -t $IMAGE_TAG .
+
+      # 4. Проверка и остановка запущенного контейнера (если существует)
+      - name: Check and stop running container
+        run: |
+          RUNNING_CONTAINER=$(docker ps -q --filter "name=nodejs-app")
+          if [ -n "$RUNNING_CONTAINER" ]; then
+            echo "Container is running. Stopping and removing it."
+            docker stop nodejs-app && docker rm nodejs-app
+          else
+            echo "No running container found."
+          fi
+
+      # 5. Запуск нового контейнера с новым образом
+      - name: Run new Docker container
+        run: |
+          IMAGE_TAG=nodejs-app:${{ github.sha }}
+          echo "Running Docker container with image: $IMAGE_TAG"
+          docker run -d --name nodejs-app -p 80:80 $IMAGE_TAG
