@@ -1,5 +1,5 @@
 {
-    "name": "myapp",
+    "name": "nodejs-app",
     "version": "1.0.0",
     "description": "My first Node.js app",
     "main": "app.js",
