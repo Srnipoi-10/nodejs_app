@@ -1,50 +1,45 @@
-name: CI Pipeline
+name: CI/CD Pipeline
 
 on:
-  # Запускать workflow при push и PR
   push:
     branches:
       - main
-      - feature/**  # Для всех feature-веток
-  pull_request:
-    branches:
-      - main
+      - feature/**
 
 jobs:
-  build-and-test:
+  build-and-deploy:
     runs-on: self-hosted
 
     steps:
-      # Шаг 1: Клонирование репозитория
+      # 1. Клонирование репозитория
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Шаг 2: Установка Node.js
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
+      # 2. Установка Docker CLI (если нужно)
+      - name: Set up Docker CLI
+        run: sudo apt-get update && sudo apt-get install -y docker.io
 
-      # Шаг 3: Установка зависимостей
-      - name: Install dependencies
-        run: npm install
-
-      # Шаг 4: Запуск тестов
-      - name: Run tests
-        run: npm test
-
-  deploy:
-    if: github.ref == 'refs/heads/main' # Запускать только при push в main
-    runs-on: self-hosted
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Build Docker Image
+      # 3. Сборка нового Docker-образа с уникальным тегом
+      - name: Build Docker image
         run: |
-          docker build -t nodejs-app .
+          IMAGE_TAG=nodejs-app:${{ github.sha }}
+          echo "Building Docker image with tag: $IMAGE_TAG"
+          docker build -t $IMAGE_TAG .
 
-      - name: Deploy to Server
+      # 4. Проверка и остановка запущенного контейнера (если существует)
+      - name: Check and stop running container
         run: |
-          docker run -d --name nodejs-app -p 3000:3000 nodejs-app
+          RUNNING_CONTAINER=$(docker ps -q --filter "name=nodejs-app")
+          if [ -n "$RUNNING_CONTAINER" ]; then
+            echo "Container is running. Stopping and removing it."
+            docker stop nodejs-app && docker rm nodejs-app
+          else
+            echo "No running container found."
+          fi
+
+      # 5. Запуск нового контейнера с новым образом
+      - name: Run new Docker container
+        run: |
+          IMAGE_TAG=nodejs-app:${{ github.sha }}
+          echo "Running Docker container with image: $IMAGE_TAG"
+          docker run -d --name nodejs-app -p 80:80 $IMAGE_TAG
