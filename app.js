@@ -4,7 +4,7 @@ const app = express();
 const port = 80;
 
 // Главная страница
-app.get('/', (req, res) => res.send('Hello World! Antony you cool, maybe one more time'));
+app.get('/', (req, res) => res.send('Hello World! Antony dumb!'));
 
 // Динамическое приветствие
 app.get('/greet/:name', (req, res) => {
