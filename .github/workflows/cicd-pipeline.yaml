@@ -6,56 +6,43 @@ on:
       - main
       - feature/**
 
+env:
+  IMAGE_NAME: nodejs-app
+  CONTAINER_NAME: nodejs-app
+  APP_PORT: 80
+
 jobs:
+  setup-docker:
+    runs-on: self-hosted
+    steps:
+      - name: Check and install Docker
+        run: |
+          chmod +x ./scripts/check_docker.sh
+          ./scripts/check_docker.sh
+
   build-and-deploy:
     runs-on: self-hosted
-
+    needs: setup-docker
     steps:
-      # 1. Клонирование репозитория
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Установка Docker CLI (если нужно)
-      #- name: Set up Docker CLI
-      #  run: sudo apt-get update && sudo apt-get install -y docker.io
-      - name: Check and install Docker
+      - name: Build and deploy
         run: |
-          if ! [ -x "$(command -v docker)" ]; then
-            echo "Docker не установлен. Выполняется установка..."
-            sudo apt-get update -y
-            sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu focal stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-            sudo apt-get update -y
-            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-            sudo systemctl start docker
-            sudo systemctl enable docker
-          else
-            echo "Docker уже установлен. Пропускаем установку."
-          fi
-          docker --version && echo "Docker установлен и работает корректно."
+          chmod +x ./scripts/deploy.sh
+          ./scripts/deploy.sh ${{ env.IMAGE_NAME }} ${{ env.CONTAINER_NAME }} ${{ env.APP_PORT }}
 
-      # 3. Сборка нового Docker-образа с уникальным тегом
-      - name: Build Docker image
+      - name: Health check
         run: |
-          IMAGE_TAG=nodejs-app:${{ github.sha }}
-          echo "Building Docker image with tag: $IMAGE_TAG"
-          docker build -t $IMAGE_TAG .
-
-      # 4. Проверка и остановка запущенного контейнера (если существует)
-      - name: Check and stop running container
-        run: |
-          RUNNING_CONTAINER=$(docker ps -q --filter "name=nodejs-app")
-          if [ -n "$RUNNING_CONTAINER" ]; then
-            echo "Container is running. Stopping and removing it."
-            docker stop nodejs-app && docker rm nodejs-app
-          else
-            echo "No running container found."
-          fi
-
-      # 5. Запуск нового контейнера с новым образом
-      - name: Run new Docker container
-        run: |
-          IMAGE_TAG=nodejs-app:${{ github.sha }}
-          echo "Running Docker container with image: $IMAGE_TAG"
-          docker run -d --name nodejs-app -p 80:80 $IMAGE_TAG
+          echo "Checking application health..."
+          for i in {1..10}; do
+            if curl -s http://localhost:${{ env.APP_PORT }} > /dev/null; then
+              echo "Application is healthy!"
+              exit 0
+            else
+              echo "Waiting for application to become healthy..."
+              sleep 2
+            fi
+          done
+          echo "Application did not start in time."
+          exit 1
